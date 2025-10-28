@@ -318,7 +318,7 @@ const HorseAnalysisApp = () => {
     }).filter(n => n !== null);
 
     const tanshoDic = resultNums[0] === top1.horseNum ? 'hit' : 'miss';
-    const fukushoHit = resultNums.length >= 1 && resultNums.slice(0, 3).includes(top1.horseNum) ? 'hit' : 'miss';
+    const fukushoHit = resultNums.slice(0, 3).includes(top1.horseNum) ? 'hit' : 'miss';
 
     const updatedRaces = races.map(race =>
       race.id === currentRace.id
@@ -425,7 +425,7 @@ const HorseAnalysisApp = () => {
                 }`}
               >
                 過去の予想
-                {races.filter(r => r.result?.tansho === 'hit').length > 0 && (
+                {races.filter(r => r.result?.fukusho === 'hit').length > 0 && (
                   <span className="text-lg">✅</span>
                 )}
               </button>
@@ -454,7 +454,7 @@ const HorseAnalysisApp = () => {
                         {race.createdAt} · {race.horses.length}頭
                         {race.courseKey && ` · ${race.courseKey}`}
                         {race.result && ' · 結果: ' + race.result.ranking}
-                        {race.result?.tansho === 'hit' && ' ✅'}
+                        {race.result?.fukusho === 'hit' && ' ✅'}
                       </p>
                     </div>
                     
