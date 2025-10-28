@@ -51,6 +51,8 @@ const HorseAnalysisApp = () => {
   const [showMemoModal, setShowMemoModal] = useState(false);
 
   const [raceSelectedCourse, setRaceSelectedCourse] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [raceToDelete, setRaceToDelete] = useState(null);
 
   const factors = [
     { name: '能力値', weight: 15, key: 'タイム指数' },
@@ -220,6 +222,13 @@ const HorseAnalysisApp = () => {
     const newSettings = { ...courseSettings };
     delete newSettings[name];
     setCourseSettings(newSettings);
+  };
+
+  const deleteRace = (raceId) => {
+    const updatedRaces = races.filter(r => r.id !== raceId);
+    setRaces(updatedRaces);
+    setShowDeleteConfirm(false);
+    setRaceToDelete(null);
   };
 
   const calculateWinRate = (horses, courseKey = null) => {
@@ -409,13 +418,16 @@ const HorseAnalysisApp = () => {
               </button>
               <button
                 onClick={() => setActiveTab('races-past')}
-                className={`px-4 py-2 rounded-md font-semibold ${
+                className={`px-4 py-2 rounded-md font-semibold flex items-center gap-2 ${
                   activeTab === 'races-past'
                     ? 'bg-blue-500 text-white'
                     : 'bg-gray-300 text-gray-800'
                 }`}
               >
                 過去の予想
+                {races.filter(r => r.result?.tansho === 'hit').length > 0 && (
+                  <span className="text-lg">✅</span>
+                )}
               </button>
             </div>
 
@@ -427,19 +439,37 @@ const HorseAnalysisApp = () => {
                 ).map((race) => (
                   <div
                     key={race.id}
-                    className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-blue-400 cursor-pointer"
-                    onClick={() => {
-                      setCurrentRace(race);
-                      setRaceSelectedCourse(race.courseKey);
-                      setMemo(race.memo || '');
-                    }}
+                    className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-blue-400 cursor-pointer flex items-center justify-between group"
                   >
-                    <h3 className="font-semibold text-gray-800">{race.name}</h3>
-                    <p className="text-sm text-gray-600">
-                      {race.createdAt} · {race.horses.length}頭
-                      {race.courseKey && ` · ${race.courseKey}`}
-                      {race.result && ' · 結果: ' + race.result.ranking}
-                    </p>
+                    <div
+                      className="flex-1"
+                      onClick={() => {
+                        setCurrentRace(race);
+                        setRaceSelectedCourse(race.courseKey);
+                        setMemo(race.memo || '');
+                      }}
+                    >
+                      <h3 className="font-semibold text-gray-800">{race.name}</h3>
+                      <p className="text-sm text-gray-600">
+                        {race.createdAt} · {race.horses.length}頭
+                        {race.courseKey && ` · ${race.courseKey}`}
+                        {race.result && ' · 結果: ' + race.result.ranking}
+                        {race.result?.tansho === 'hit' && ' ✅'}
+                      </p>
+                    </div>
+                    
+                    {isAdmin && (
+                      <button
+                        onClick={() => {
+                          setRaceToDelete(race.id);
+                          setShowDeleteConfirm(true);
+                        }}
+                        className="ml-4 p-2 text-red-500 hover:bg-red-50 rounded-md opacity-0 group-hover:opacity-100 transition"
+                        title="このレースを削除"
+                      >
+                        🗑️
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -722,6 +752,35 @@ const HorseAnalysisApp = () => {
             </div>
           </div>
         )}
+
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-lg">
+              <h3 className="text-xl font-semibold mb-4 text-red-600">レースを削除しますか？</h3>
+              <p className="text-gray-700 mb-6">
+                この操作は取り消せません。本当に削除してもよろしいですか？
+              </p>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={() => deleteRace(raceToDelete)}
+                  className="flex-1 px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition font-semibold"
+                >
+                  削除する
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setRaceToDelete(null);
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -781,12 +840,14 @@ const HorseAnalysisApp = () => {
             )}
           </div>
           <div className="flex gap-3 flex-wrap">
-            <button
-              onClick={() => setShowCourseSelectModal(true)}
-              className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600 font-semibold text-sm"
-            >
-              コース設定変更
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => setShowCourseSelectModal(true)}
+                className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600 font-semibold text-sm"
+              >
+                コース設定変更
+              </button>
+            )}
             <button
               onClick={() => {
                 setOddsInput(currentRace.odds || {});
@@ -827,7 +888,9 @@ const HorseAnalysisApp = () => {
                       {idx + 1}位
                     </div>
                     <div>
-                      <div className="text-lg font-bold text-gray-800">{horse.name}</div>
+                      <div className="text-lg font-bold text-gray-800">
+                        {horse.horseNum}. {horse.name}
+                      </div>
                       {odds > 0 && (
                         <div className="text-xs text-gray-600 mt-1">
                           オッズ {odds.toFixed(1)} × 勝率 {horse.winRate.toFixed(1)}% = {value.toFixed(0)}
@@ -852,24 +915,24 @@ const HorseAnalysisApp = () => {
         </div>
       </div>
 
-      {isAdmin && (
-        <div className="bg-white rounded-lg p-6 shadow-lg mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold text-gray-700">メモ（管理者のみ）</h2>
+      <div className="bg-white rounded-lg p-6 shadow-lg mb-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold text-gray-700">メモ</h2>
+          {isAdmin && (
             <button
               onClick={() => setShowMemoModal(true)}
               className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 font-semibold text-sm"
             >
               編集
             </button>
-          </div>
-          <div className="p-4 bg-gray-50 rounded border border-gray-200 min-h-32">
-            <p className="text-gray-700 whitespace-pre-wrap">{memo || '（メモなし）'}</p>
-          </div>
+          )}
         </div>
-      )}
+        <div className="p-4 bg-gray-50 rounded border border-gray-200 min-h-32">
+          <p className="text-gray-700 whitespace-pre-wrap">{memo || '（メモなし）'}</p>
+        </div>
+      </div>
 
-      {showCourseSelectModal && (
+      {showCourseSelectModal && isAdmin && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-lg">
             <h3 className="text-lg font-semibold mb-4 text-gray-800">コース設定を選択</h3>
@@ -916,7 +979,7 @@ const HorseAnalysisApp = () => {
         </div>
       )}
 
-      {showMemoModal && (
+      {showMemoModal && isAdmin && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-lg">
             <h3 className="text-lg font-semibold mb-4 text-gray-800">メモを編集</h3>
