@@ -9,7 +9,23 @@ const HorseAnalysisApp = () => {
   const [importMessage, setImportMessage] = useState('');
   const [importMessageType, setImportMessageType] = useState('');
   
+  const [courseSettings, setCourseSettings] = useState({});
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [activeTab, setActiveTab] = useState('races-upcoming');
+  const [courseName, setCourseName] = useState('');
+  const [tempFactors, setTempFactors] = useState({
+    '能力値': 15,
+    'コース・距離適性': 18,
+    '展開利': 17,
+    '近走安定度': 10,
+    '馬場適性': 10,
+    '騎手': 5,
+    '斤量': 10,
+    '調教': 15
+  });
+  
   const [selectedCourse, setSelectedCourse] = useState(null);
+  const [statsFilterCourse, setStatsFilterCourse] = useState(null);
   const [selectedFactors, setSelectedFactors] = useState({
     'タイム指数': true,
     'コース・距離適性': true,
@@ -30,8 +46,21 @@ const HorseAnalysisApp = () => {
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
 
+  const factors = [
+    { name: '能力値', weight: 15, key: 'タイム指数' },
+    { name: 'コース・距離適性', weight: 18, key: 'コース・距離適性' },
+    { name: '展開利', weight: 17, key: '展開利' },
+    { name: '近走安定度', weight: 10, key: '近走安定度' },
+    { name: '馬場適性', weight: 10, key: '馬場適性' },
+    { name: '騎手', weight: 5, key: '騎手' },
+    { name: '斤量', weight: 10, key: '斤量' },
+    { name: '調教', weight: 15, key: '調教' }
+  ];
+
   useEffect(() => {
     const savedRaces = localStorage.getItem('races');
+    const savedSettings = localStorage.getItem('courseSettings');
+    
     if (savedRaces) {
       try {
         setRaces(JSON.parse(savedRaces));
@@ -39,11 +68,23 @@ const HorseAnalysisApp = () => {
         console.error('Failed to load races:', e);
       }
     }
+    
+    if (savedSettings) {
+      try {
+        setCourseSettings(JSON.parse(savedSettings));
+      } catch (e) {
+        console.error('Failed to load settings:', e);
+      }
+    }
   }, []);
 
   useEffect(() => {
     localStorage.setItem('races', JSON.stringify(races));
   }, [races]);
+
+  useEffect(() => {
+    localStorage.setItem('courseSettings', JSON.stringify(courseSettings));
+  }, [courseSettings]);
 
   const parseHorseData = (text) => {
     const lines = text.trim().split('\n');
@@ -138,10 +179,24 @@ const HorseAnalysisApp = () => {
     }, 1500);
   };
 
-  const calculateWinRate = (horses) => {
-    if (!horses || horses.length === 0) return [];
+  const saveCourseSettings = () => {
+    if (!courseName.trim()) {
+      alert('コース名を入力してください');
+      return;
+    }
 
-    const weights = {
+    const total = Object.values(tempFactors).reduce((a, b) => a + b, 0);
+    if (total !== 100) {
+      alert(`比重の合計が100%ではありません（現在${total}%）`);
+      return;
+    }
+
+    setCourseSettings({
+      ...courseSettings,
+      [courseName]: { ...tempFactors }
+    });
+    setCourseName('');
+    setTempFactors({
       '能力値': 15,
       'コース・距離適性': 18,
       '展開利': 17,
@@ -150,7 +205,31 @@ const HorseAnalysisApp = () => {
       '騎手': 5,
       '斤量': 10,
       '調教': 15
-    };
+    });
+    setShowSettingsModal(false);
+  };
+
+  const deleteCourseSettings = (name) => {
+    const newSettings = { ...courseSettings };
+    delete newSettings[name];
+    setCourseSettings(newSettings);
+  };
+
+  const calculateWinRate = (horses) => {
+    if (!horses || horses.length === 0) return [];
+
+    const weights = selectedCourse && courseSettings[selectedCourse]
+      ? courseSettings[selectedCourse]
+      : {
+        '能力値': 15,
+        'コース・距離適性': 18,
+        '展開利': 17,
+        '近走安定度': 10,
+        '馬場適性': 10,
+        '騎手': 5,
+        '斤量': 10,
+        '調教': 15
+      };
 
     const horsesWithScores = horses.map(horse => {
       let totalScore = 0;
@@ -177,6 +256,32 @@ const HorseAnalysisApp = () => {
       ...horse,
       winRate: (horse.exp / sumExp) * 100
     })).sort((a, b) => b.winRate - a.winRate);
+  };
+
+  const calculateStats = (courseKey = null) => {
+    let recordedRaces = races.filter(r => r.result);
+    
+    if (courseKey) {
+      recordedRaces = recordedRaces.filter(r => r.courseKey === courseKey);
+    }
+    
+    if (recordedRaces.length === 0) return null;
+
+    const tanshoHits = recordedRaces.filter(r => r.result.tansho === 'hit').length;
+    const fukushoHits = recordedRaces.filter(r => r.result.fukusho === 'hit').length;
+
+    return {
+      total: recordedRaces.length,
+      tansho: { hits: tanshoHits, rate: ((tanshoHits / recordedRaces.length) * 100).toFixed(1) },
+      fukusho: { hits: fukushoHits, rate: ((fukushoHits / recordedRaces.length) * 100).toFixed(1) }
+    };
+  };
+
+  const handleFactorToggle = (factorKey) => {
+    setSelectedFactors({
+      ...selectedFactors,
+      [factorKey]: !selectedFactors[factorKey]
+    });
   };
 
   const handleSaveResult = () => {
@@ -226,7 +331,7 @@ const HorseAnalysisApp = () => {
 
   if (!currentRace) {
     return (
-      <div className="w-full max-w-4xl mx-auto p-6 bg-gray-50">
+      <div className="w-full max-w-4xl mx-auto p-6 bg-gray-50 min-h-screen">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold text-gray-800">競馬予想分析ツール</h1>
           <button
@@ -237,44 +342,250 @@ const HorseAnalysisApp = () => {
           </button>
         </div>
 
-        <div className="bg-white rounded-lg p-6 shadow">
-          {isAdmin && (
-            <button
-              onClick={() => setShowUploadModal(true)}
-              className="px-6 py-3 bg-blue-500 text-white rounded-md hover:bg-blue-600 font-semibold mb-4"
-            >
-              📤 レースデータを追加
-            </button>
-          )}
-          {!isAdmin && <p className="text-gray-500 text-sm mb-4">※ 管理者のみ追加可能（パスコード：1234）</p>}
-
-          {races.length > 0 ? (
-            <div className="space-y-2">
-              <h2 className="text-lg font-semibold text-gray-700 mb-3">レース一覧</h2>
-              {races.map((race) => (
-                <div
-                  key={race.id}
-                  className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-blue-400 cursor-pointer transition"
-                  onClick={() => {
-                    setCurrentRace(race);
-                    if (race.courseKey) {
-                      setSelectedCourse(race.courseKey);
-                    }
-                  }}
-                >
-                  <h3 className="font-semibold text-gray-800">{race.name}</h3>
-                  <p className="text-sm text-gray-600">
-                    {race.createdAt} · {race.horses.length}頭
-                    {race.courseKey && ` · ${race.courseKey}`}
-                    {race.result && ' · 結果: ' + race.result.ranking}
-                  </p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-500 text-center py-8">レースデータがまだありません</p>
-          )}
+        <div className="flex gap-4 mb-6 flex-wrap">
+          <button
+            onClick={() => setActiveTab('races-upcoming')}
+            className={`px-6 py-2 rounded-md font-semibold ${
+              activeTab === 'races-upcoming' || activeTab === 'races-past'
+                ? 'bg-blue-500 text-white'
+                : 'bg-gray-300 text-gray-800'
+            }`}
+          >
+            レース予想
+          </button>
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`px-6 py-2 rounded-md font-semibold ${
+              activeTab === 'settings'
+                ? 'bg-blue-500 text-white'
+                : 'bg-gray-300 text-gray-800'
+            }`}
+            disabled={!isAdmin}
+          >
+            コース設定
+          </button>
+          <button
+            onClick={() => setActiveTab('stats')}
+            className={`px-6 py-2 rounded-md font-semibold ${
+              activeTab === 'stats'
+                ? 'bg-blue-500 text-white'
+                : 'bg-gray-300 text-gray-800'
+            }`}
+          >
+            成績分析
+          </button>
         </div>
+
+        {(activeTab === 'races-upcoming' || activeTab === 'races-past') && (
+          <div className="bg-white rounded-lg p-6 shadow">
+            {isAdmin && (
+              <button
+                onClick={() => setShowUploadModal(true)}
+                className="px-6 py-3 bg-blue-500 text-white rounded-md hover:bg-blue-600 font-semibold mb-4"
+              >
+                📤 レースデータを追加
+              </button>
+            )}
+            {!isAdmin && <p className="text-gray-500 text-sm mb-4">※ 管理者のみ追加可能</p>}
+
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => setActiveTab('races-upcoming')}
+                className={`px-4 py-2 rounded-md font-semibold ${
+                  activeTab === 'races-upcoming'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-300 text-gray-800'
+                }`}
+              >
+                レース予想
+              </button>
+              <button
+                onClick={() => setActiveTab('races-past')}
+                className={`px-4 py-2 rounded-md font-semibold ${
+                  activeTab === 'races-past'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-300 text-gray-800'
+                }`}
+              >
+                過去の予想
+              </button>
+            </div>
+
+            {races.length > 0 ? (
+              <div className="space-y-2">
+                {(activeTab === 'races-upcoming' 
+                  ? races.filter(r => !r.result)
+                  : races.filter(r => r.result)
+                ).map((race) => (
+                  <div
+                    key={race.id}
+                    className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-blue-400 cursor-pointer"
+                    onClick={() => {
+                      setCurrentRace(race);
+                      if (race.courseKey) {
+                        setSelectedCourse(race.courseKey);
+                      }
+                    }}
+                  >
+                    <h3 className="font-semibold text-gray-800">{race.name}</h3>
+                    <p className="text-sm text-gray-600">
+                      {race.createdAt} · {race.horses.length}頭
+                      {race.courseKey && ` · ${race.courseKey}`}
+                      {race.result && ' · 結果: ' + race.result.ranking}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500 text-center py-8">レースデータがまだありません</p>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'settings' && isAdmin && (
+          <div className="bg-white rounded-lg p-6 shadow">
+            <button
+              onClick={() => setShowSettingsModal(true)}
+              className="px-6 py-3 bg-green-500 text-white rounded-md hover:bg-green-600 transition font-semibold mb-4"
+            >
+              新しいコース設定を作成
+            </button>
+
+            {Object.keys(courseSettings).length > 0 ? (
+              <div className="space-y-3">
+                <h2 className="text-lg font-semibold text-gray-700 mb-3">保存済みコース設定</h2>
+                {Object.entries(courseSettings).map(([name, factorData]) => (
+                  <div
+                    key={name}
+                    className="p-4 bg-gray-50 rounded-lg border border-gray-200"
+                  >
+                    <div className="flex justify-between items-start mb-3">
+                      <h3 className="font-semibold text-gray-800 text-lg">{name}</h3>
+                      <button
+                        onClick={() => deleteCourseSettings(name)}
+                        className="p-2 text-red-500 hover:bg-red-50 rounded-md transition"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                      {Object.entries(factorData).map(([factor, weight]) => (
+                        <div key={factor} className="bg-white p-2 rounded border border-gray-200">
+                          <div className="text-gray-600 text-xs">{factor}</div>
+                          <div className="font-bold text-blue-600">{weight}%</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500 text-center py-8">保存されたコース設定がありません</p>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'stats' && (
+          <div className="bg-white rounded-lg p-6 shadow">
+            <h2 className="text-lg font-semibold text-gray-700 mb-4">成績分析</h2>
+            
+            {calculateStats(statsFilterCourse) ? (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <h3 className="text-sm font-semibold text-gray-600 mb-2">単勝</h3>
+                  <div className="text-2xl font-bold text-blue-600">
+                    {calculateStats(statsFilterCourse).tansho.rate}%
+                  </div>
+                  <div className="text-sm text-gray-600 mt-1">
+                    {calculateStats(statsFilterCourse).tansho.hits}/{calculateStats(statsFilterCourse).total}
+                  </div>
+                </div>
+                <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                  <h3 className="text-sm font-semibold text-gray-600 mb-2">複勝</h3>
+                  <div className="text-2xl font-bold text-green-600">
+                    {calculateStats(statsFilterCourse).fukusho.rate}%
+                  </div>
+                  <div className="text-sm text-gray-600 mt-1">
+                    {calculateStats(statsFilterCourse).fukusho.hits}/{calculateStats(statsFilterCourse).total}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-gray-500 text-center py-8">結果が記録されたレースがありません</p>
+            )}
+          </div>
+        )}
+
+        {showSettingsModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg p-6 max-w-2xl w-full shadow-lg max-h-96 overflow-y-auto">
+              <h3 className="text-xl font-semibold mb-4 text-gray-800">新しいコース設定を作成</h3>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-600 mb-2">コース名</label>
+                <input
+                  type="text"
+                  value={courseName}
+                  onChange={(e) => setCourseName(e.target.value)}
+                  placeholder="例：新潟千直、京都ダ1400"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-600 mb-3">比重設定（合計100%）</label>
+                <div className="space-y-2">
+                  {Object.entries(tempFactors).map(([factor, weight]) => (
+                    <div key={factor} className="flex items-center gap-3">
+                      <label className="w-40 text-sm text-gray-700">{factor}</label>
+                      <input
+                        type="number"
+                        value={weight}
+                        onChange={(e) => setTempFactors({
+                          ...tempFactors,
+                          [factor]: parseInt(e.target.value) || 0
+                        })}
+                        className="w-20 px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-600">%</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 p-2 bg-blue-100 rounded text-sm text-blue-800">
+                  合計: {Object.values(tempFactors).reduce((a, b) => a + b, 0)}%
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={saveCourseSettings}
+                  className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition font-semibold"
+                >
+                  保存
+                </button>
+                <button
+                  onClick={() => {
+                    setShowSettingsModal(false);
+                    setCourseName('');
+                    setTempFactors({
+                      '能力値': 15,
+                      'コース・距離適性': 18,
+                      '展開利': 17,
+                      '近走安定度': 10,
+                      '馬場適性': 10,
+                      '騎手': 5,
+                      '斤量': 10,
+                      '調教': 15
+                    });
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400 transition"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {showUploadModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -303,6 +614,20 @@ const HorseAnalysisApp = () => {
               </div>
 
               <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-600 mb-2">コース設定を選択（オプション）</label>
+                <select
+                  value={selectedCourse || ''}
+                  onChange={(e) => setSelectedCourse(e.target.value || null)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                >
+                  <option value="">デフォルト設定を使用</option>
+                  {Object.keys(courseSettings).map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-600 mb-2">データ（コピペ）</label>
                 <textarea
                   value={pasteText}
@@ -315,7 +640,7 @@ const HorseAnalysisApp = () => {
               <div className="flex gap-3">
                 <button
                   onClick={handleDataImport}
-                  className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 font-semibold"
+                  className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition font-semibold"
                 >
                   追加
                 </button>
@@ -325,6 +650,7 @@ const HorseAnalysisApp = () => {
                     setPasteText('');
                     setRaceName('');
                     setImportMessage('');
+                    setSelectedCourse(null);
                   }}
                   className="flex-1 px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400"
                 >
@@ -369,7 +695,7 @@ const HorseAnalysisApp = () => {
                       setAdminPassword('');
                     }
                   }}
-                  className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 font-semibold"
+                  className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition font-semibold"
                 >
                   認証
                 </button>
@@ -396,7 +722,7 @@ const HorseAnalysisApp = () => {
   const resultsWithRate = calculateWinRate(currentRace.horses);
 
   return (
-    <div className="w-full max-w-6xl mx-auto p-6 bg-gray-50">
+    <div className="w-full max-w-6xl mx-auto p-6 bg-gray-50 min-h-screen">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold text-gray-800">{currentRace.name}</h1>
